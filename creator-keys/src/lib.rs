@@ -9548,7 +9548,7 @@ impl CreatorKeysContract {
     }
 
     /// Read the active slope milestone index and effective per-key curve slope.
-    pub fn get_current_curve_slope_milestone(
+    pub fn current_curve_slope_milestone(
         env: Env,
         key_id: Address,
     ) -> Result<(u32, i128), ContractError> {

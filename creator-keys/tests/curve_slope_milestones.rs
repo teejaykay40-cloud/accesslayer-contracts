@@ -10,14 +10,23 @@ use creator_keys::{
     supply_milestones::{CurveSlopeTier, SupplyMilestoneUnlockedEvent},
     CreatorKeysContractClient, FeatureError,
 };
-use soroban_sdk::{testutils::Address as _, Address, Env, Symbol, TryFromVal, Vec};
+use soroban_sdk::{
+    testutils::{Address as _, Events as _},
+    Address, Env, Symbol, TryFromVal, Vec,
+};
 
 fn configured_tiers(env: &Env) -> Vec<CurveSlopeTier> {
     Vec::from_array(
         env,
         [
-            CurveSlopeTier { supply: 2, slope: 0 },
-            CurveSlopeTier { supply: 5, slope: 50 },
+            CurveSlopeTier {
+                supply: 2,
+                slope: 0,
+            },
+            CurveSlopeTier {
+                supply: 5,
+                slope: 50,
+            },
         ],
     )
 }
@@ -33,17 +42,17 @@ fn slope_changes_once_when_supply_crosses_threshold_and_emits_event() {
     let (client, contract_id) = register_creator_keys(&env);
     let admin = set_protocol_fee_bps(&env, &client, 9000, 1000);
     set_key_price_for_tests(&env, &client, 100);
+    client.set_circuit_breaker_threshold(&admin, &10_000_u32);
     client.set_curve_slope(&admin, &100_i128);
-    let creator = register_test_creator(&env, &client, "slope-owner");
+    let creator = register_test_creator(&env, &client, "slopeowner");
     let buyer = test_wallet_address(&env, "slope-buyer");
     client.set_curve_slope_milestones(&admin, &creator, &configured_tiers(&env));
 
-    assert_eq!(client.get_current_curve_slope_milestone(&creator), Ok((0, 100)));
+    assert_eq!(client.current_curve_slope_milestone(&creator), (0, 100));
     buy_one(&client, &creator, &buyer);
-    assert_eq!(client.get_current_curve_slope_milestone(&creator), Ok((0, 100)));
+    assert_eq!(client.current_curve_slope_milestone(&creator), (0, 100));
     buy_one(&client, &creator, &buyer);
 
-    assert_eq!(client.get_current_curve_slope_milestone(&creator), Ok((1, 0)));
     assert_event(
         &env,
         &contract_id,
@@ -54,9 +63,6 @@ fn slope_changes_once_when_supply_crosses_threshold_and_emits_event() {
             new_slope: 0,
         },
     );
-
-    buy_one(&client, &creator, &buyer);
-    assert_eq!(client.get_current_curve_slope_milestone(&creator), Ok((1, 0)));
     let unlock_events = env
         .events()
         .all()
@@ -69,6 +75,10 @@ fn slope_changes_once_when_supply_crosses_threshold_and_emits_event() {
         })
         .count();
     assert_eq!(unlock_events, 1);
+    assert_eq!(client.current_curve_slope_milestone(&creator), (1, 0));
+
+    buy_one(&client, &creator, &buyer);
+    assert_eq!(client.current_curve_slope_milestone(&creator), (1, 0));
 }
 
 #[test]
@@ -77,7 +87,8 @@ fn slope_schedule_is_immutable_and_validated() {
     let (client, _) = register_creator_keys(&env);
     let admin = set_protocol_fee_bps(&env, &client, 9000, 1000);
     set_key_price_for_tests(&env, &client, 100);
-    let creator = register_test_creator(&env, &client, "immutable-owner");
+    client.set_circuit_breaker_threshold(&admin, &10_000_u32);
+    let creator = register_test_creator(&env, &client, "immutableowner");
     let tiers = configured_tiers(&env);
 
     client.set_curve_slope_milestones(&admin, &creator, &tiers);
@@ -89,11 +100,17 @@ fn slope_schedule_is_immutable_and_validated() {
     let invalid = Vec::from_array(
         &env,
         [
-            CurveSlopeTier { supply: 3, slope: 10 },
-            CurveSlopeTier { supply: 2, slope: 20 },
+            CurveSlopeTier {
+                supply: 3,
+                slope: 10,
+            },
+            CurveSlopeTier {
+                supply: 2,
+                slope: 20,
+            },
         ],
     );
-    let another_creator = register_test_creator(&env, &client, "invalid-owner");
+    let another_creator = register_test_creator(&env, &client, "invalidowner");
     assert_eq!(
         client.try_set_curve_slope_milestones(&admin, &another_creator, &invalid),
         Err(Ok(FeatureError::InvalidCurveMilestones)),

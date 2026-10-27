@@ -121,7 +121,10 @@ pub fn check_and_apply_curve_slope_milestone(
     key_id: &Address,
 ) -> Result<(u32, i128), ContractError> {
     let key = curve_slope_storage_key(key_id);
-    let Some(mut config) = env.storage().persistent().get::<FeatureKey, CurveSlopeConfig>(&key)
+    let Some(mut config) = env
+        .storage()
+        .persistent()
+        .get::<FeatureKey, CurveSlopeConfig>(&key)
     else {
         return Ok((0, crate::resolve_curve_slope(env, key_id)));
     };
